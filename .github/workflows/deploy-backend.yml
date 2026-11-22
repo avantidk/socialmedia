@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-node@v4
         with:
-          version: latest
+          node-version: 22
       - name: Push secrets and deploy the function
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -32,6 +32,6 @@ jobs:
           for k in SITE_URL ENCRYPTION_KEY CRON_SECRET META_APP_ID META_APP_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET X_CLIENT_ID X_CLIENT_SECRET; do
             v="${!k}"; [ -n "$v" ] && echo "$k=$v" >> secrets.env
           done
-          supabase secrets set --env-file secrets.env --project-ref "$ref" --yes
+          npx --yes supabase@2 secrets set --env-file secrets.env --project-ref "$ref" --yes
           rm secrets.env
-          supabase functions deploy api --no-verify-jwt --project-ref "$ref" --yes
+          npx --yes supabase@2 functions deploy api --no-verify-jwt --project-ref "$ref" --yes
