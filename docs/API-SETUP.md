@@ -6,28 +6,38 @@ later from the **Accounts** page, by logging in to that company's profile.
 
 Platform dashboards change their menus often. If a button has moved, search for the name in quotes.
 
-Do the steps in this order: **0 → 1 → 2 → 3 → 4 → 5 → 6**. Platforms need your live website address, so deploy first.
+Do the steps in this order: **0 → 1 → 2 → 3 → 4 → 5 → 6 → 7**.
+
+**How it is hosted (GitHub + Supabase only, no Vercel):**
+- The pages you see are a static site on **GitHub Pages**: `https://avantidk.github.io/socialmedia/`
+- The server part (secrets, posting, OAuth, stats) is a **Supabase Edge Function** named `api`.
+- GitHub Actions deploys both automatically every time `main` changes.
+
+In this guide **PROJECT_REF** is the first part of your Supabase URL: for `https://abcd1234.supabase.co` it is `abcd1234`.
+Your OAuth redirect addresses on every platform will use the Supabase URL, not the GitHub Pages one.
 
 ---
 
-## 0. Deploy the site and get your URL
+## 0. GitHub setup
 
-1. Push this repo to GitHub (already done) and import it on **vercel.com** (free Hobby plan) → New Project.
-2. Don't add env vars yet. Deploy once and note your address, e.g. `https://socialhub-xyz.vercel.app`.
-   Call it **SITE_URL** below (no trailing slash).
-3. Vercel's free Hobby plan is meant for non-commercial use. For company use, check Vercel's current terms,
-   or host on any Node host you prefer (Render, Railway, a VPS). The code works on any Node 20+ host.
+1. Repo → **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+   (GitHub Pages on a **private** repo needs a paid GitHub plan, Pro or higher. The published site is public even if the repo is private.)
+2. Keep the repo's branch named `main`.
 
 ## 1. Supabase (free)
 
 1. supabase.com → New project. Save the database password.
 2. **SQL Editor → New query**, paste all of `supabase/schema.sql`, press **Run**.
-   This creates the tables, the three companies and the `media` storage bucket.
-3. **Project Settings → API**. Copy:
-   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon` public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` secret key → `SUPABASE_SERVICE_ROLE_KEY` (never share this one)
-4. Free-plan limit: **50 MB per uploaded file**, 1 GB total storage. Longer videos need the paid plan or smaller files.
+   It creates the tables, the three companies, the `media` storage bucket and the access rules.
+3. **Authentication → Users → Add user → Create new user**: enter your email and a strong password,
+   tick **Auto Confirm User**. Create one user for each person who needs access.
+4. **Authentication → Sign In / Providers**: turn **off** "Allow new users to sign up".
+   (Important: every logged-in user can use the dashboard, so only you should be able to create users.)
+5. **Project Settings → API**: copy the **Project URL** and the **anon public** key (you need them in step 5).
+6. **Account (top right) → Access Tokens → Generate new token**: copy it (you need it in step 5 as `SUPABASE_ACCESS_TOKEN`).
+7. Free-plan limit: **50 MB per uploaded file**, 1 GB total storage.
+8. Edge Function limits: free functions have a time limit per request, so very large videos may fail on YouTube/X.
+   If one fails you'll see the reason on the Posts page.
 
 ## 2. Facebook + Instagram (Meta)
 
@@ -44,7 +54,7 @@ Do the steps in this order: **0 → 1 → 2 → 3 → 4 → 5 → 6**. Platforms
 3. Left menu **App settings → Basic**: copy **App ID** → `META_APP_ID` and **App secret** → `META_APP_SECRET`.
 4. **Add product → Facebook Login** (shown as "Facebook Login" or "Facebook Login for Business") → Set up.
    Under its **Settings**, in **Valid OAuth Redirect URIs** add exactly:
-   `SITE_URL/api/callback/meta`
+   `https://PROJECT_REF.supabase.co/functions/v1/api/callback/meta`
    and save. Make sure "Client OAuth login" and "Web OAuth login" are on.
 5. **App roles → Roles**: add the Facebook profile of every person who will connect a company
    (Hariom Ashram, Vedika Wellness, UnkganIT admins) as **Administrator**, **Developer** or **Tester**.
@@ -75,7 +85,7 @@ Do the steps in this order: **0 → 1 → 2 → 3 → 4 → 5 → 6**. Platforms
    You will see a "Google hasn't verified this app" warning when connecting: click **Advanced → Go to Social Hub (unsafe)**.
    That's fine because it's your own app, limited to 100 users.
 5. **APIs & Services → Credentials → Create credentials → OAuth client ID** → type **Web application**.
-   Under **Authorized redirect URIs** add exactly: `SITE_URL/api/callback/youtube`
+   Under **Authorized redirect URIs** add exactly: `https://PROJECT_REF.supabase.co/functions/v1/api/callback/youtube`
    Copy **Client ID** → `GOOGLE_CLIENT_ID` and **Client secret** → `GOOGLE_CLIENT_SECRET`.
 6. **Two YouTube limits to know:**
    - **Daily quota:** default 10,000 units/day and one upload costs 1,600 → about **6 uploads per day, shared by all 3 companies**.
@@ -92,8 +102,8 @@ Do the steps in this order: **0 → 1 → 2 → 3 → 4 → 5 → 6**. Platforms
 3. Open the app → **User authentication settings → Set up**:
    - App permissions: **Read and write**
    - Type of App: **Web App, Automated App or Bot** (confidential client)
-   - Callback URI / Redirect URL: `SITE_URL/api/callback/x`
-   - Website URL: `SITE_URL`
+   - Callback URI / Redirect URL: `https://PROJECT_REF.supabase.co/functions/v1/api/callback/x`
+   - Website URL: `https://avantidk.github.io/socialmedia`
    → Save.
 4. **Keys and tokens** tab → under **OAuth 2.0 Client ID and Client Secret** copy them to `X_CLIENT_ID` and `X_CLIENT_SECRET`.
    (Not the "API Key & Secret" or "Bearer token"; those are a different thing.)
@@ -106,35 +116,38 @@ Do the steps in this order: **0 → 1 → 2 → 3 → 4 → 5 → 6**. Platforms
 - Image/video upload may be restricted on the free tier. If X rejects media, the post fails with a clear message on
   the Posts page and text-only posts still work.
 
-## 5. Put the secrets in Vercel
+## 5. Put the secrets in GitHub
 
-Vercel → your project → **Settings → Environment Variables**. Add everything from `.env.example`:
+Repo → **Settings → Secrets and variables → Actions → New repository secret**. Add each one:
 
-| Name | Value |
+| Secret name | Value |
 |---|---|
-| `SITE_URL` | your site address, no trailing slash |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | from step 1 |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL from step 1 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public key from step 1 |
+| `SUPABASE_ACCESS_TOKEN` | access token from step 1 |
+| `ENCRYPTION_KEY` | a long random string (`openssl rand -hex 32`) |
+| `CRON_SECRET` | another long random string |
 | `META_APP_ID`, `META_APP_SECRET` | step 2 |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | step 3 |
 | `X_CLIENT_ID`, `X_CLIENT_SECRET` | step 4 |
-| `ADMIN_PASSWORD` | the password you will log in to the dashboard with |
-| `SESSION_SECRET`, `CRON_SECRET`, `ENCRYPTION_KEY` | three different long random strings (30+ characters each) |
 
-Then **Deployments → Redeploy**.
+Never change `ENCRYPTION_KEY` later, or already-connected accounts will need reconnecting.
+You can add the platform secrets later as you get them; leave them out until then.
 
-Generate random strings with: `openssl rand -hex 32`
+Then go to **Actions** tab and run **Deploy site (GitHub Pages)** and **Deploy backend (Supabase Edge Function)**
+(or just push any change to `main`). After a minute the site is live at
+`https://avantidk.github.io/socialmedia/`. Re-run **Deploy backend** after adding or changing any secret.
 
 ## 6. Turn on scheduled posting + automatic stats (free)
 
-1. Open `supabase/cron.sql`, replace `YOUR_SITE` (domain only, no `https://`) and `YOUR_CRON_SECRET`
-   (same as `CRON_SECRET`), then run it in the Supabase SQL Editor.
-2. This makes Supabase call the site **every minute** to publish due posts and **every 3 hours** to refresh stats.
+1. Open `supabase/cron.sql`, replace `YOUR_PROJECT_REF` and `YOUR_CRON_SECRET` (same value as the `CRON_SECRET` secret),
+   and run it in the Supabase SQL Editor.
+2. Supabase now calls the backend **every minute** to publish due posts and **every 3 hours** to refresh stats.
 
 ## 7. First run
 
-1. Open `SITE_URL`, log in with `ADMIN_PASSWORD`.
+1. Open `https://avantidk.github.io/socialmedia/` and log in with the email/password from step 1.
 2. **Accounts** → pick a company tab → Connect Facebook+Instagram / YouTube / X.
-3. **New post** → pick a company, tick the accounts, write text, attach a file → **Post now**.
-   Start with a harmless test post.
-4. **Posts** page shows per-platform success or the exact error, with a Retry button.
+3. **New post** → pick the accounts, write text, attach a file → **Post now**. Start with a harmless test post.
+4. **Posts** shows per-platform success or the exact error, with a Retry button.
 5. **Dashboard** → **Refresh stats** to see followers, likes, comments and views.

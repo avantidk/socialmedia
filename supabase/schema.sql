@@ -80,3 +80,34 @@ alter table account_stats enable row level security;
 -- Public bucket for uploaded media (Instagram needs a public URL to fetch from).
 insert into storage.buckets (id, name, public) values ('media', 'media', true)
 on conflict (id) do nothing;
+
+-- ============================================================
+-- Part 2: browser access (the site talks to Supabase directly)
+-- ============================================================
+alter table post_targets add column if not exists claimed_at timestamptz;
+
+create table if not exists oauth_states (     -- one-time state for the Connect buttons
+  state text primary key,
+  verifier text not null,
+  company_id uuid not null references companies(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table oauth_states enable row level security;
+
+-- Logged-in users may READ. Nothing can be written from the browser except file uploads;
+-- all writes go through the Edge Function (service role).
+drop policy if exists "read" on companies;     create policy "read" on companies for select to authenticated using (true);
+drop policy if exists "read" on accounts;      create policy "read" on accounts for select to authenticated using (true);
+drop policy if exists "read" on posts;         create policy "read" on posts for select to authenticated using (true);
+drop policy if exists "read" on post_targets;  create policy "read" on post_targets for select to authenticated using (true);
+drop policy if exists "read" on items;         create policy "read" on items for select to authenticated using (true);
+drop policy if exists "read" on account_stats; create policy "read" on account_stats for select to authenticated using (true);
+
+-- Never let the browser see token columns of `accounts` (even encrypted).
+revoke all on accounts from anon, authenticated;
+grant select (id, company_id, platform, external_id, display_name, username, created_at) on accounts to authenticated;
+revoke all on companies, posts, post_targets, items, account_stats, oauth_states from anon;
+grant select on companies, posts, post_targets, items, account_stats to authenticated;
+
+drop policy if exists "auth upload media" on storage.objects;
+create policy "auth upload media" on storage.objects for insert to authenticated with check (bucket_id = 'media');
